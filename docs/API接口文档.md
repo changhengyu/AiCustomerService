@@ -377,3 +377,134 @@ Content-Type：`application/xml`
 开发环境访问：`http://localhost:5000/openapi/v1.json`
 
 可使用 [Swagger Editor](https://editor.swagger.io/) 导入查看。
+
+## 10. AI 智能体（v0.3.0+）
+
+> 基于 MEAI FunctionInvokingChatClient 自动工具调用，最多 5 轮迭代。
+
+### POST `/api/v1/agent/chat`
+
+请求体：
+
+```json
+{
+  "question": "帮我查订单 12345 的物流",
+  "model": "qwen-plus",
+  "provider": "tongyi",
+  "temperature": 0.7
+}
+```
+
+响应：
+
+```json
+{
+  "content": "已为您查询订单 12345 的物流：顺丰快递 SF1234567890，运输中。",
+  "toolCalls": ["QueryLogistics"],
+  "inputTokens": 256,
+  "outputTokens": 128,
+  "latencyMs": 1820,
+  "provider": "tongyi"
+}
+```
+
+可用 Provider：`tongyi` / `openai` / `deepseek` / `zhipu`。
+
+### GET `/api/v1/agent/providers`
+
+列出全部可用 LLM Provider 及其默认模型（公开接口，无需鉴权）。
+
+## 11. BI 报表（v0.3.0+）
+
+> 供后台 Dashboard 使用，所有接口按当前用户租户隔离。
+
+### GET `/api/v1/bi/overview?days=30`
+
+返回 Dashboard 总览数据：
+
+```json
+{
+  "totalConversations": 1240,
+  "activeConversations": 18,
+  "humanConversations": 42,
+  "closedConversations": 1180,
+  "aiHandledConversations": 1198,
+  "totalCustomers": 856,
+  "totalDocuments": 32,
+  "totalMessages": 9842,
+  "estimatedMinutesSaved": 5990,
+  "periodDays": 30
+}
+```
+
+### GET `/api/v1/bi/trend?days=7`
+
+按天聚合的会话趋势（自动补齐缺失日期）。
+
+### GET `/api/v1/bi/intention`
+
+客户意向度分布（high/medium/low/none + 占比百分比）。
+
+### GET `/api/v1/bi/hot-questions?topN=10&days=7`
+
+高频问题 Top N（按消息内容归一化聚合）。
+
+### GET `/api/v1/bi/ai-usage?days=30`
+
+AI 用量与延迟统计（含 P95 延迟）。
+
+## 12. 开放 API（v0.3.0+）
+
+### API Key 管理
+
+| Method | Path | 说明 |
+| --- | --- | --- |
+| `POST` | `/api/v1/open/keys` | 创建 Key（明文仅返回一次） |
+| `GET`  | `/api/v1/open/keys` | 列出当前租户的 Key |
+| `DELETE` | `/api/v1/open/keys/{id}` | 吊销 Key |
+
+创建请求：
+
+```json
+{ "name": "BI 数据同步", "scopes": "read", "expiresAt": "2027-01-01T00:00:00Z" }
+```
+
+创建响应（`plainTextKey` 仅返回一次，需立即保存）：
+
+```json
+{
+  "id": "...",
+  "prefix": "ak_live_a1b2c3d4",
+  "name": "BI 数据同步",
+  "scopes": "read",
+  "expiresAt": "2027-01-01T00:00:00Z",
+  "createdAt": "2026-06-26T12:00:00Z",
+  "plainTextKey": "ak_live_a1b2c3d4e5f6..."
+}
+```
+
+### Webhook 管理
+
+| Method | Path | 说明 |
+| --- | --- | --- |
+| `POST` | `/api/v1/open/webhooks` | 创建订阅（生成 HMAC secret） |
+| `GET`  | `/api/v1/open/webhooks` | 列出当前租户的订阅 |
+| `DELETE` | `/api/v1/open/webhooks/{id}` | 删除订阅 |
+| `POST` | `/api/v1/open/webhooks/dispatch` | 手动触发一次投递（管理用） |
+
+订阅事件示例：`conversation.created`、`message.received`、`evaluation.completed`，
+使用 `*` 订阅所有事件。
+
+**Webhook 请求头**：
+
+```
+X-Webhook-Event: conversation.created
+X-Webhook-Signature: sha256=<hmac-hex>
+X-Webhook-Delivery: <delivery-uuid>
+```
+
+**签名算法**：`HMAC-SHA256(secret, raw_body)` → hex（小写）。
+
+**重试策略**：指数退避 1 → 2 → 4 → 8 → 16 → 32 分钟，最多 6 次；6 次后状态置 `failed`。
+
+---

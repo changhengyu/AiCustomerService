@@ -1,5 +1,7 @@
 using AiCustomerService.Core.Configuration;
 using AiCustomerService.Core.Interfaces;
+using AiCustomerService.Infrastructure.AI;
+using AiCustomerService.Infrastructure.AI.Agent;
 using AiCustomerService.Infrastructure.AI.RAG;
 using AiCustomerService.Infrastructure.AI.Tongyi;
 using AiCustomerService.Infrastructure.Cache;
@@ -24,6 +26,7 @@ public static class DependencyInjection
         services.Configure<TongyiOptions>(config.GetSection(TongyiOptions.SectionName));
         services.Configure<JwtOptions>(config.GetSection(JwtOptions.SectionName));
         services.Configure<WeChatOptions>(config.GetSection(WeChatOptions.SectionName));
+        services.Configure<AiProviderOptions>(config.GetSection(AiProviderOptions.SectionName));
 
         var tongyi = config.GetSection(TongyiOptions.SectionName).Get<TongyiOptions>()
             ?? new TongyiOptions();
@@ -54,6 +57,15 @@ public static class DependencyInjection
         // 业务 AI 服务（基于 MEAI 抽象）
         services.AddScoped<IAIService, TongyiAIService>();
         services.AddScoped<IEmbeddingService, TongyiEmbeddingService>();
+
+        // 多 LLM 适配器工厂（v0.3.0+）
+        services.AddSingleton<IAiProviderFactory, AiProviderFactory>();
+
+        // 智能体（Function Calling）
+        services.AddScoped<CustomerServiceTools>();
+        services.AddScoped<AgentService>();
+        services.AddScoped<BiService>();
+        services.AddScoped<OpenApiService>();
 
         // WeChat（仍用 HttpClient，因为微信 API 不在 AI 范畴）
         services.AddHttpClient<WeChatOfficialClient>();

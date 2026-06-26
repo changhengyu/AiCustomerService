@@ -4,19 +4,26 @@
 
 ## [Unreleased]
 
+### Planned
+- 客户画像与精准营销（v0.4.0）
+- 语音消息支持（v0.4.0）
+- SaaS 计费与订阅中心（v0.4.0）
+
+## [0.3.0] - 2026-08-01
+
 ### Added
-- 后端：.NET 10 + Clean Architecture 完整骨架
-- 后端：EF Core 10 + pgvector 向量检索
-- 后端：Hangfire 后台任务（文档摄取、租户重建）
-- 后端：通义千问 AI 集成（qwen-plus + text-embedding-v3）
-- 后端：JWT 认证 + Refresh Token 机制
-- 后端：多租户架构（TenantContext）
-- 后端：8 个 REST API Controller
-- 后端：微信公众台回调（验签 + XML 消息接收 + 完整 AES-256-CBC 加密）
-- 前端：Vue 3 + Element Plus 后台管理
-- 前端：uni-app 跨端客服工作台（精修版）
-- 部署：Docker Compose 一键启动
-- 文档：完整 README + 开发指南 + API 文档 + 架构设计
+- 多 LLM 适配器：`IAiProviderFactory` 统一通义/OpenAI/DeepSeek/智谱，OpenAI 兼容协议复用同一 OpenAIClient
+- Function Calling 智能体：`AgentService` 基于 MEAI `FunctionInvokingChatClient`，
+  内置 5 个客服工具（订单/物流/退款/转人工/客户历史），自动多轮调用最多 5 次
+- BI 报表与 Dashboard：`BiController` 提供 5 个端点（overview/trend/intention/hot-questions/ai-usage），
+  会话趋势按天聚合、意向度分布、高频问题聚合、AI 用量 P95 延迟
+- 开放 API（API Key + Webhook）：`OpenApiController` 颁发 `ak_live_` 前缀 Key，
+  Webhook Outbox 投递（指数退避重试 + HMAC-SHA256 签名 + 投递日志）
+- 3 个新 EF Core 实体：`ApiKey` / `WebhookConfig` / `WebhookDelivery`
+- 2 个新 Controller：`AgentController` / `BiController` / `OpenApiController`
+- 智能体端点：`GET /api/v1/agent/providers` 列出全部 LLM 提供商
+
+## [0.2.0] - 2026-07-15
 
 ## [0.2.0] - 2026-07-15
 

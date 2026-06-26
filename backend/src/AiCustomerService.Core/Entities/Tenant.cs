@@ -16,6 +16,8 @@ public class Tenant
     public DateTime? TrialEndsAt { get; set; }
     /// <summary>所属行业代码：general / ecommerce / education / saas / finance / medical</summary>
     public string? IndustryCode { get; set; }
+    /// <summary>租户指定的 LLM provider（tongyi/openai/deepseek/zhipu）</summary>
+    public string AiProvider { get; set; } = "tongyi";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

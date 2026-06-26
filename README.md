@@ -319,21 +319,20 @@ server {
 
 ### 🚧 v0.3.0+（规划）
 
-- [ ] 多 LLM 适配器（OpenAI、DeepSeek、Claude）
-- [ ] Function Calling 智能体工作流
+- [x] 多 LLM 适配器（通义 / OpenAI / DeepSeek / 智谱，统一 OpenAI 兼容协议）
+- [x] Function Calling 智能体工作流（5 个客服工具自动调用）
 - [ ] 客户画像与精准营销
 - [ ] 语音消息支持
-- [ ] BI 报表
-- [ ] 开放 API 与 Webhook
+- [x] BI 报表（overview / trend / intention / hot-questions / ai-usage）
+- [x] 开放 API 与 Webhook（API Key + HMAC 签名 Outbox 投递）
 
-### 🔮 v0.3.0+
+### 🔮 v0.4.0+
 
-- [ ] 多 LLM 适配器（OpenAI、DeepSeek、Claude）
-- [ ] Function Calling 智能体工作流
 - [ ] 客户画像与精准营销
 - [ ] 语音消息支持
-- [ ] BI 报表
-- [ ] 开放 API 与 Webhook
+- [ ] SaaS 计费与订阅中心（Stripe / 微信支付）
+- [ ] 多语言国际化
+- [ ] Agent 评估与可观测（Langfuse / Phoenix 集成）
 
 ---
 
