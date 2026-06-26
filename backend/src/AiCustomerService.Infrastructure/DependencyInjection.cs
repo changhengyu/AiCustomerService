@@ -8,8 +8,10 @@ using AiCustomerService.Infrastructure.MultiTenancy;
 using AiCustomerService.Infrastructure.Security;
 using AiCustomerService.Infrastructure.Services;
 using AiCustomerService.Infrastructure.WeChat;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using OpenAI;
 using StackExchange.Redis;
 
 namespace AiCustomerService.Infrastructure;
@@ -23,10 +25,39 @@ public static class DependencyInjection
         services.Configure<JwtOptions>(config.GetSection(JwtOptions.SectionName));
         services.Configure<WeChatOptions>(config.GetSection(WeChatOptions.SectionName));
 
-        // HttpClients
-        services.AddHttpClient<IAIService, TongyiAIService>();
-        services.AddHttpClient<IEmbeddingService, TongyiEmbeddingService>();
+        var tongyi = config.GetSection(TongyiOptions.SectionName).Get<TongyiOptions>()
+            ?? new TongyiOptions();
+
+        // ============================================================
+        // Microsoft.Extensions.AI (MEAI) 集成
+        // 通过 OpenAIClient 客户端连接 Tongyi 的 OpenAI 兼容端点
+        // 之后在框架内用 IChatClient / IEmbeddingGenerator 调用
+        // 不再有任何业务代码直接使用 HttpClient
+        // ============================================================
+        var openAiClient = new OpenAIClient(
+            new System.ClientModel.ApiKeyCredential(tongyi.ApiKey),
+            new OpenAIClientOptions
+            {
+                Endpoint = new Uri($"{tongyi.Endpoint.TrimEnd('/')}/compatible-mode/v1")
+            });
+
+        // 注册 IChatClient（来自 MEAI 包）
+        services.AddChatClient(sp => openAiClient
+            .GetChatClient(tongyi.ChatModel)
+            .AsIChatClient());
+
+        // 注册 IEmbeddingGenerator<string, Embedding<float>>（来自 MEAI 包）
+        services.AddEmbeddingGenerator(sp => openAiClient
+            .GetEmbeddingClient(tongyi.EmbeddingModel)
+            .AsIEmbeddingGenerator());
+
+        // 业务 AI 服务（基于 MEAI 抽象）
+        services.AddScoped<IAIService, TongyiAIService>();
+        services.AddScoped<IEmbeddingService, TongyiEmbeddingService>();
+
+        // WeChat（仍用 HttpClient，因为微信 API 不在 AI 范畴）
         services.AddHttpClient<WeChatOfficialClient>();
+        services.AddScoped<WeChatOfficialClient>();
 
         // 单例：基础设施组件
         services.AddSingleton<TextCleaner>();
@@ -42,9 +73,6 @@ public static class DependencyInjection
             services.AddSingleton<IConnectionMultiplexer>(_ =>
                 ConnectionMultiplexer.Connect(redisConn));
         services.AddScoped<ICacheService, RedisCacheService>();
-
-        // WeChat
-        services.AddScoped<WeChatOfficialClient>();
 
         // MultiTenancy
         services.AddHttpContextAccessor();

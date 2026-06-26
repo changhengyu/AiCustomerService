@@ -1,34 +1,33 @@
-using System.Net.Http.Json;
 using AiCustomerService.Core.Configuration;
 using AiCustomerService.Core.Interfaces;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace AiCustomerService.Infrastructure.AI.Tongyi;
 
+/// <summary>
+/// 通义千问 Embedding 服务（基于 Microsoft.Extensions.AI 框架）。
+/// 通过 IEmbeddingGenerator&lt;string, Embedding&lt;float&gt;&gt; 调用 Tongyi 兼容端点。
+/// 所有 HTTP 通信由 MEAI / OpenAI SDK 内部处理，开发者不再直接接触 HttpClient。
+/// </summary>
 public class TongyiEmbeddingService : IEmbeddingService
 {
-    private readonly HttpClient _http;
-    private readonly TongyiOptions _options;
+    private readonly IEmbeddingGenerator<string, Embedding<float>> _generator;
     private readonly ILogger<TongyiEmbeddingService> _logger;
 
     public TongyiEmbeddingService(
-        HttpClient http,
-        IOptions<TongyiOptions> options,
+        IEmbeddingGenerator<string, Embedding<float>> generator,
         ILogger<TongyiEmbeddingService> logger)
     {
-        _options = options.Value;
+        _generator = generator;
         _logger = logger;
-        _http = http;
-        _http.BaseAddress = new Uri(_options.Endpoint);
-        _http.DefaultRequestHeaders.Add("Authorization", $"Bearer {_options.ApiKey}");
-        _http.Timeout = TimeSpan.FromSeconds(30);
     }
 
     public async Task<float[]> EmbedAsync(string text, CancellationToken ct = default)
     {
-        var result = await EmbedBatchAsync(new[] { text }, ct);
-        return result[0];
+        var result = await _generator.GenerateAsync(text, cancellationToken: ct);
+        return result.Vector.ToArray();
     }
 
     public async Task<List<float[]>> EmbedBatchAsync(IEnumerable<string> texts, CancellationToken ct = default)
@@ -36,24 +35,16 @@ public class TongyiEmbeddingService : IEmbeddingService
         var input = texts.ToList();
         if (input.Count == 0) return new List<float[]>();
 
-        var reqBody = new TongyiEmbedRequest
+        try
         {
-            Model = _options.EmbeddingModel,
-            Input = new TongyiEmbedInput { Texts = input },
-            Parameters = new TongyiEmbedParameters { Dimension = 1024, EncodingFormat = "float" }
-        };
-
-        var resp = await _http.PostAsJsonAsync(
-            "/api/v1/services/embeddings/text-embedding/text-embedding", reqBody, ct);
-        resp.EnsureSuccessStatusCode();
-        var result = await resp.Content.ReadFromJsonAsync<TongyiEmbedResponse>(cancellationToken: ct);
-
-        if (result?.Output?.Embeddings == null)
-            throw new InvalidOperationException("Embedding 返回为空");
-
-        return result.Output.Embeddings
-            .OrderBy(e => e.TextIndex)
-            .Select(e => e.Embedding.ToArray())
-            .ToList();
+            // 一次性批量生成：MEAI 会自动按服务端的 batch 限制拆分
+            var results = await _generator.GenerateAsync(input, cancellationToken: ct);
+            return results.Select(r => r.Vector.ToArray()).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Embedding 批量生成失败: Count={Count}", input.Count);
+            throw;
+        }
     }
 }
