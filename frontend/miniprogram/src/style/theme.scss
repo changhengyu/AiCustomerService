@@ -1,0 +1,77 @@
+/* ============================================
+   AI 客服 SaaS - 浅色商业主题
+   设计令牌（统一浅色调）
+   ============================================ */
+
+:root {
+  /* 主色：靛蓝（专业、可信） */
+  --color-primary: #4F6EF7;
+  --color-primary-hover: #3D5BD9;
+  --color-primary-pressed: #2E48BB;
+  --color-primary-soft: #EEF1FE;
+  --color-primary-softer: #F7F8FE;
+
+  /* 辅色 */
+  --color-success: #10B981;
+  --color-success-soft: #E6F8F1;
+  --color-warning: #F59E0B;
+  --color-warning-soft: #FEF5E5;
+  --color-danger: #F43F5E;
+  --color-danger-soft: #FEEAEE;
+  --color-info: #06B6D4;
+  --color-info-soft: #E0F7FB;
+
+  /* 中性（Slate 色阶） */
+  --color-bg: #F7F8FA;
+  --color-bg-elevated: #FFFFFF;
+  --color-bg-muted: #F1F3F7;
+  --color-divider: #EAECEF;
+  --color-divider-light: #F1F3F5;
+
+  /* 文字 */
+  --color-text-primary: #0F172A;
+  --color-text-secondary: #475569;
+  --color-text-tertiary: #94A3B8;
+  --color-text-placeholder: #CBD5E1;
+  --color-text-inverse: #FFFFFF;
+
+  /* 形状 */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-full: 999px;
+
+  /* 阴影（柔和投影） */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.06);
+  --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.08);
+  --shadow-focus: 0 0 0 3px rgba(79, 110, 247, 0.16);
+
+  /* 间距 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* 字体 */
+  --font-xs: 11px;
+  --font-sm: 13px;
+  --font-base: 14px;
+  --font-md: 15px;
+  --font-lg: 16px;
+  --font-xl: 18px;
+  --font-2xl: 20px;
+  --font-3xl: 24px;
+
+  /* 安全区 */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}

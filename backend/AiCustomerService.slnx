@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AiCustomerService.Api/AiCustomerService.Api.csproj" />
+    <Project Path="src/AiCustomerService.Core/AiCustomerService.Core.csproj" />
+    <Project Path="src/AiCustomerService.Infrastructure/AiCustomerService.Infrastructure.csproj" />
+    <Project Path="src/AiCustomerService.Worker/AiCustomerService.Worker.csproj" />
+  </Folder>
+</Solution>

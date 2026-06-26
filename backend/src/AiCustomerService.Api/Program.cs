@@ -1,0 +1,148 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using AiCustomerService.Core.Exceptions;
+using AiCustomerService.Core.Interfaces;
+using AiCustomerService.Infrastructure;
+using AiCustomerService.Infrastructure.Data;
+using AiCustomerService.Infrastructure.MultiTenancy;
+using Hangfire;
+using Hangfire.PostgreSql;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Serilog;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// ===== Serilog =====
+builder.Host.UseSerilog((ctx, lc) =>
+    lc.ReadFrom.Configuration(ctx.Configuration)
+      .WriteTo.Console()
+      .WriteTo.File("logs/app-.log", rollingInterval: RollingInterval.Day));
+
+// ===== EF Core / PostgreSQL + pgvector =====
+var connectionString = builder.Configuration.GetConnectionString("Default")
+    ?? "Host=localhost;Port=5432;Database=ai_customer_service;Username=postgres;Password=postgres123";
+
+builder.Services.AddDbContext<AppDbContext>(opts =>
+    opts.UseNpgsql(connectionString, npgsql => npgsql.UseVector()));
+
+// ===== Infrastructure (AI / Cache / WeChat / Hangfire Jobs / JWT / Tenant) =====
+builder.Services.AddInfrastructure(builder.Configuration);
+
+// ===== Controllers =====
+builder.Services.AddControllers()
+    .AddJsonOptions(o =>
+    {
+        o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower;
+        o.JsonSerializerOptions.DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower;
+        o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
+
+// ===== Swagger / OpenAPI =====
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddOpenApi();
+
+// ===== Health Checks =====
+builder.Services.AddHealthChecks();
+
+// ===== CORS =====
+builder.Services.AddCors(opts =>
+    opts.AddDefaultPolicy(p => p
+        .AllowAnyOrigin()
+        .AllowAnyMethod()
+        .AllowAnyHeader()));
+
+// ===== JWT =====
+var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "your-very-long-secret-key-at-least-32-chars-please-change";
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "AiCustomerService";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "AiCustomerService";
+
+builder.Services.AddAuthentication(Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(opts =>
+    {
+        opts.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
+            IssuerSigningKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(
+                System.Text.Encoding.UTF8.GetBytes(jwtSecret))
+        };
+    });
+builder.Services.AddAuthorization();
+
+// ===== Hangfire =====
+builder.Services.AddHangfire(cfg => cfg
+    .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+    .UseSimpleAssemblyNameTypeSerializer()
+    .UseRecommendedSerializerSettings()
+    .UsePostgreSqlStorage(opts => opts.UseNpgsqlConnection(connectionString)));
+builder.Services.AddHangfireServer();
+
+var app = builder.Build();
+
+// ===== 全局异常处理 =====
+app.UseExceptionHandler(errApp =>
+{
+    errApp.Run(async ctx =>
+    {
+        var feature = ctx.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>();
+        var ex = feature?.Error;
+        ctx.Response.ContentType = "application/json";
+
+        var (status, code) = ex switch
+        {
+            NotFoundException => (404, "not_found"),
+            UnauthorizedException => (401, "unauthorized"),
+            ForbiddenException => (403, "forbidden"),
+            ValidationException => (400, "validation_error"),
+            QuotaExceededException => (429, "quota_exceeded"),
+            _ => (500, "internal_error")
+        };
+
+        ctx.Response.StatusCode = status;
+        await ctx.Response.WriteAsJsonAsync(new
+        {
+            code,
+            message = ex?.Message ?? "服务器内部错误",
+            trace_id = ctx.TraceIdentifier
+        });
+    });
+});
+
+// ===== Pipeline =====
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
+
+app.UseSerilogRequestLogging();
+app.UseCors();
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapControllers();
+app.MapHealthChecks("/health");
+app.UseHangfireDashboard();
+
+// 自动迁移（开发环境）
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+}
+
+app.MapGet("/", () => Results.Ok(new
+{
+    name = "AI Customer Service API",
+    version = "1.0.0",
+    framework = ".NET 10",
+    docs = "/openapi/v1.json",
+    health = "/health",
+    hangfire = "/hangfire"
+}));
+
+app.Run();

@@ -1,0 +1,17 @@
+{
+  "pages": [
+    { "path": "pages/login/index", "style": { "navigationBarTitleText": "登录" } },
+    { "path": "pages/index/index", "style": { "navigationBarTitleText": "会话" } },
+    { "path": "pages/chat/index", "style": { "navigationBarTitleText": "对话" } },
+    { "path": "pages/customer/index", "style": { "navigationBarTitleText": "客户" } },
+    { "path": "pages/profile/index", "style": { "navigationBarTitleText": "我的" } }
+  ],
+  "globalStyle": { "navigationBarTextStyle": "white", "navigationBarTitleText": "AI 客服", "navigationBarBackgroundColor": "#1890ff" },
+  "tabBar": {
+    "color": "#666", "selectedColor": "#1890ff",
+    "list": [
+      { "pagePath": "pages/index/index", "text": "会话", "iconPath": "static/chat.png", "selectedIconPath": "static/chat.png" },
+      { "pagePath": "pages/profile/index", "text": "我的", "iconPath": "static/me.png", "selectedIconPath": "static/me.png" }
+    ]
+  }
+}

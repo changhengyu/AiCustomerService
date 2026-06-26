@@ -1,0 +1,14 @@
+{
+  "extends": "@dcloudio/types/uni-app.d.ts",
+  "compilerOptions": {
+    "strict": true,
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["@dcloudio/types"]
+  },
+  "vueCompilerOptions": { "plugins": ["@dcloudio/uni-cli-shared/lib/vue-language-plugin"] }
+}

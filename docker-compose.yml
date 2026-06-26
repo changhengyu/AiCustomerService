@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ai-cs-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+      POSTGRES_DB: ai_customer_service
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai-cs-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ai-cs-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Default: "Host=postgres;Port=5432;Database=ai_customer_service;Username=postgres;Password=postgres123"
+      ConnectionStrings__Redis: "redis:6379"
+      Tongyi__ApiKey: "${TONGYI_API_KEY:-your-api-key}"
+      Tongyi__ChatModel: "qwen-plus"
+      Tongyi__EmbeddingModel: "text-embedding-v3"
+      Jwt__Secret: "${JWT_SECRET:-please-change-this-to-a-32-character-secret-string}"
+      Jwt__Issuer: "AiCustomerService"
+      Jwt__Audience: "AiCustomerService"
+      WeChat__OfficialToken: "${WECHAT_OFFICIAL_TOKEN:-}"
+      WeChat__EncodingAESKey: "${WECHAT_AES_KEY:-}"
+      WeChat__AppSecret: "${WECHAT_APP_SECRET:-}"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+
+  admin-web:
+    image: nginx:alpine
+    container_name: ai-cs-admin
+    volumes:
+      - ./frontend/admin/dist:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  redisdata:
