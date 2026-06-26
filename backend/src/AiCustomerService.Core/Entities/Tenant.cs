@@ -12,6 +12,10 @@ public class Tenant
     public int MonthlyMessageQuota { get; set; } = 100;
     public int MonthlyMessageUsed { get; set; }
     public string Settings { get; set; } = "{}";
+    /// <summary>试用期截止时间（仅 Plan=trial 时有值）</summary>
+    public DateTime? TrialEndsAt { get; set; }
+    /// <summary>所属行业代码：general / ecommerce / education / saas / finance / medical</summary>
+    public string? IndustryCode { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

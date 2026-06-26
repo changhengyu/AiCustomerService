@@ -2,6 +2,7 @@ using AiCustomerService.Core.DTOs.Knowledge;
 using AiCustomerService.Core.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace AiCustomerService.Api.Controllers;
 
@@ -31,6 +32,7 @@ public class KnowledgeController : ControllerBase
 
     [HttpPost("documents")]
     [RequestSizeLimit(50_000_000)]
+    [EnableRateLimiting("upload-tenant")]
     public async Task<ActionResult<Guid>> Upload(
         [FromForm] string title,
         [FromForm] IFormFile file,

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using AiCustomerService.Core.Exceptions;
 using AiCustomerService.Core.Interfaces;
 using AiCustomerService.Infrastructure;
@@ -8,6 +9,7 @@ using AiCustomerService.Infrastructure.MultiTenancy;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
@@ -82,6 +84,112 @@ builder.Services.AddHangfire(cfg => cfg
     .UsePostgreSqlStorage(opts => opts.UseNpgsqlConnection(connectionString)));
 builder.Services.AddHangfireServer();
 
+// ===== Rate Limiting =====
+// 详见 docs/架构设计.md 4.3 限流
+// - login: 5 次/分钟/IP（防爆破）
+// - register: 3 次/小时/IP（防恶意注册）
+// - knowledge upload: 20 次/小时/租户（防滥用存储）
+// - chat: 100 次/小时/租户（trial plan）
+// - default: 600 次/分钟/IP（基础防 DDoS）
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // 通用 IP 限流（兜底）
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
+    {
+        var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"global:{ip}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 600,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+
+    // 登录 IP 限流：5 次/分钟
+    options.AddPolicy("login-ip", ctx =>
+    {
+        var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"login:{ip}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            });
+    });
+
+    // 注册 IP 限流：3 次/小时
+    options.AddPolicy("register-ip", ctx =>
+    {
+        var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"register:{ip}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 3,
+                Window = TimeSpan.FromHours(1),
+                QueueLimit = 0
+            });
+    });
+
+    // 文档上传租户限流：20 次/小时
+    options.AddPolicy("upload-tenant", ctx =>
+    {
+        var tenantId = ctx.User.FindFirst("tenant_id")?.Value
+            ?? ctx.Connection.RemoteIpAddress?.ToString()
+            ?? "anonymous";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"upload:{tenantId}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromHours(1),
+                QueueLimit = 0
+            });
+    });
+
+    // 聊天租户限流（按 plan）：100 次/小时 trial，500/h pro
+    options.AddPolicy("chat-tenant", ctx =>
+    {
+        var tenantId = ctx.User.FindFirst("tenant_id")?.Value
+            ?? ctx.Connection.RemoteIpAddress?.ToString()
+            ?? "anonymous";
+        var plan = ctx.User.FindFirst("plan")?.Value ?? "trial";
+        var limit = plan switch { "pro" => 500, "enterprise" => 5000, _ => 100 };
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"chat:{plan}:{tenantId}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = limit,
+                Window = TimeSpan.FromHours(1),
+                QueueLimit = 0
+            });
+    });
+
+    // 429 响应统一格式
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "application/json";
+        var payload = JsonSerializer.Serialize(new
+        {
+            code = "quota_exceeded",
+            message = "请求过于频繁，请稍后再试",
+            trace_id = context.HttpContext.TraceIdentifier
+        }, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+        });
+        await context.HttpContext.Response.WriteAsync(payload, cancellationToken);
+    };
+});
+
 var app = builder.Build();
 
 // ===== 全局异常处理 =====
@@ -121,6 +229,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseSerilogRequestLogging();
 app.UseCors();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

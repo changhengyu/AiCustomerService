@@ -1,6 +1,7 @@
 using AiCustomerService.Core.DTOs.Auth;
 using AiCustomerService.Core.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace AiCustomerService.Api.Controllers;
 
@@ -12,6 +13,7 @@ public class AuthController : ControllerBase
     public AuthController(IAuthService auth) { _auth = auth; }
 
     [HttpPost("register")]
+    [EnableRateLimiting("register-ip")]
     public async Task<ActionResult<LoginResponse>> Register(
         [FromBody] RegisterRequest request, CancellationToken ct)
     {
@@ -20,6 +22,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting("login-ip")]
     public async Task<ActionResult<LoginResponse>> Login(
         [FromBody] LoginRequest request, CancellationToken ct)
     {

@@ -23,6 +23,12 @@ public class TenantController : ControllerBase
     {
         var tenant = await _service.GetCurrentAsync(_tenantCtx.RequireTenantId(), ct);
         if (tenant == null) return NotFound();
+
+        // 计算试用期剩余天数
+        var trialDaysRemaining = tenant.TrialEndsAt.HasValue
+            ? Math.Max(0, (int)Math.Ceiling((tenant.TrialEndsAt.Value - DateTime.UtcNow).TotalDays))
+            : (int?)null;
+
         return Ok(new
         {
             tenant.Id,
@@ -32,7 +38,10 @@ public class TenantController : ControllerBase
             tenant.MonthlyMessageQuota,
             tenant.MonthlyMessageUsed,
             tenant.ContactEmail,
-            tenant.ContactPhone
+            tenant.ContactPhone,
+            tenant.IndustryCode,
+            trial_ends_at = tenant.TrialEndsAt,
+            trial_days_remaining = trialDaysRemaining
         });
     }
 

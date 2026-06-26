@@ -36,6 +36,8 @@ public class AuthService : IAuthService
             Status = "active",
             MonthlyMessageQuota = 1000,
             Settings = "{}",
+            IndustryCode = request.IndustryCode ?? "general",
+            TrialEndsAt = DateTime.UtcNow.AddDays(14),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
