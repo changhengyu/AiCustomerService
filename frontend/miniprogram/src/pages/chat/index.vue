@@ -1,15 +1,22 @@
 <script setup lang="ts">
-import { ref, nextTick } from 'vue';
+import { ref, nextTick, onUnmounted } from 'vue';
 import { onLoad, onShow } from '@dcloudio/uni-app';
 import { conversationApi } from '@/api';
+import { realtime } from '@/realtime';
 
 const id = ref('');
 const detail = ref<any>({});
 const text = ref('');
 const sending = ref(false);
-const aiTyping = ref(false);
+const aiTyping = ref(false); // 真实驱动：SignalR/WS typing 事件
 
-onLoad((q: any) => { id.value = q.id; });
+let unsubMessage: (() => void) | null = null;
+let unsubTyping: (() => void) | null = null;
+let unsubStatus: (() => void) | null = null;
+
+onLoad((q: any) => {
+  id.value = q.id;
+});
 
 async function load() {
   const d = await conversationApi.detail(id.value);
@@ -24,7 +31,7 @@ async function send() {
   text.value = '';
   try {
     await conversationApi.agentSend(id.value, content);
-    await load();
+    // 新消息会通过 realtime 推送来，不再手动 load()
   } catch (e) {
     text.value = content;
     uni.showToast({ title: '发送失败', icon: 'none' });
@@ -41,7 +48,6 @@ async function handoff() {
       if (res.confirm) {
         await conversationApi.handoff(id.value);
         uni.showToast({ title: '已转人工', icon: 'success' });
-        await load();
       }
     }
   });
@@ -55,7 +61,6 @@ async function close() {
       if (res.confirm) {
         await conversationApi.close(id.value);
         uni.showToast({ title: '已关闭', icon: 'success' });
-        await load();
       }
     }
   });
@@ -85,7 +90,53 @@ function formatTime(s: string) {
   return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
 }
 
-onShow(load);
+function onNewMessage(payload: any) {
+  if (payload?.conversationId !== id.value && payload?.conversation_id !== id.value) return;
+  if (!detail.value.messages) detail.value.messages = [];
+  const msgId = payload.messageId || payload.message_id;
+  if (detail.value.messages.some((m: any) => m.id === msgId)) return;
+  detail.value.messages.push({
+    id: msgId,
+    role: payload.role,
+    content: payload.content,
+    content_type: payload.contentType || payload.content_type || 'text',
+    created_at: payload.createdAt || payload.created_at,
+    tokens_used: payload.tokens_used,
+    latency_ms: payload.latency_ms
+  });
+  detail.value.last_message_at = payload.createdAt || payload.created_at;
+  // 滚动到底部
+  setTimeout(() => uni.pageScrollTo({ scrollTop: 99999, duration: 200 }), 50);
+}
+
+function onTyping(payload: any) {
+  if (payload?.conversationId !== id.value && payload?.conversation_id !== id.value) return;
+  if (payload.role === 'assistant') {
+    aiTyping.value = payload.isTyping !== false;
+  }
+}
+
+function onStatus(payload: any) {
+  if (payload?.conversationId !== id.value && payload?.conversation_id !== id.value) return;
+  if (detail.value) detail.value.status = payload.status;
+}
+
+onShow(async () => {
+  await load();
+  // 确保 realtime 已连接（App 启动时也会尝试连接）
+  await realtime.connect();
+  await realtime.subscribeConversation(id.value);
+  unsubMessage = realtime.on('message.new', onNewMessage);
+  unsubTyping = realtime.on('typing', onTyping);
+  unsubStatus = realtime.on('conversation.status', onStatus);
+});
+
+onUnmounted(() => {
+  unsubMessage?.();
+  unsubTyping?.();
+  unsubStatus?.();
+  realtime.unsubscribeConversation(id.value);
+});
 </script>
 
 <template>

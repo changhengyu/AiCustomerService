@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onShow } from 'vue';
+import { ref, computed, onMounted, onShow, onUnmounted } from 'vue';
 import { conversationApi, type ConversationListItem } from '@/api';
+import { realtime } from '@/realtime';
 
 const list = ref<ConversationListItem[]>([]);
 const statusFilter = ref<string>('');
 const loading = ref(false);
 const user = ref<any>(uni.getStorageSync('user') || {});
+
+let unsubMessage: (() => void) | null = null;
+let unsubStatus: (() => void) | null = null;
 
 async function load() {
   loading.value = true;
@@ -23,6 +27,28 @@ function filterBy(status: string) {
   statusFilter.value = statusFilter.value === status ? '' : status;
   load();
 }
+
+function onAnyNewMessage() {
+  // 收到租户级别的新消息事件 → 刷新列表（轻量避免每次请求详情）
+  load();
+}
+
+function onAnyStatusChange() {
+  load();
+}
+
+onShow(async () => {
+  await load();
+  // 连接 realtime（如未连接）
+  await realtime.connect();
+  unsubMessage = realtime.on('conversation.new_message', onAnyNewMessage);
+  unsubStatus = realtime.on('conversation.status_changed', onAnyStatusChange);
+});
+
+onUnmounted(() => {
+  unsubMessage?.();
+  unsubStatus?.();
+});
 
 function statusInfo(s: string) {
   const map: Record<string, { label: string; color: string; bg: string }> = {

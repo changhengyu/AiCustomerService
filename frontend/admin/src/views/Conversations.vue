@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, onBeforeUnmount, ref } from 'vue';
 import { conversationApi, type ConversationListItem } from '@/api';
 
 const list = ref<ConversationListItem[]>([]);
@@ -21,7 +21,25 @@ function statusType(s: string) {
   return { active: 'success', human: 'warning', closed: 'info' }[s] || '';
 }
 
-onMounted(load);
+function onNewMessageEvent() {
+  // Layout.vue 广播的全局事件：租户下任何会话有新消息 → 刷新列表
+  load();
+}
+
+function onStatusEvent() {
+  load();
+}
+
+onMounted(() => {
+  load();
+  window.addEventListener('aics:new_message', onNewMessageEvent);
+  window.addEventListener('aics:conversation_status', onStatusEvent);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('aics:new_message', onNewMessageEvent);
+  window.removeEventListener('aics:conversation_status', onStatusEvent);
+});
 </script>
 
 <template>
@@ -33,6 +51,7 @@ onMounted(load);
         <el-option label="已关闭" value="closed" />
       </el-select>
       <el-button @click="load">刷新</el-button>
+      <span style="margin-left:12px;color:#67c23a;font-size:12px;">● 实时同步中</span>
     </div>
 
     <el-table :data="list" v-loading="loading">

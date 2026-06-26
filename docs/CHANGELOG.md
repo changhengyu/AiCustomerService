@@ -4,6 +4,26 @@
 
 ## [Unreleased]
 
+### Added (v0.5.0-dev)
+- **实时通信（SignalR + 原生 WebSocket）** — 解决竞品差距 2.1
+  - 后端：`WorkbenchHub` 路由 `/hubs/workbench`，JWT 通过 `?access_token=` 握手鉴权；
+    `SignalRRealtimeNotifier` 实现 `IRealtimeNotifier`，在 `ConversationService` 的
+    `HandleUserMessageAsync` / `SendAgentMessageAsync` / `HandoffToHumanAsync` /
+    `CloseConversationAsync` / 意向度变化时自动推送 `message.new` /
+    `conversation.status_changed` / `typing` / `customer.intention_changed` 事件
+  - 后端：原生 WebSocket 端点 `/ws/workbench`（JSON Lines 协议），
+    通过 `RealtimeBus` 与 SignalR 共享事件，供 uni-app 小程序使用
+  - admin：`@microsoft/signalr` 客户端封装 `src/realtime.ts`，自动重连退避策略，
+    在 `Layout.vue` 连接并显示状态点，`ConversationDetail.vue` 订阅会话事件 +
+    真实驱动 AI 打字指示器，`Conversations.vue` 监听全局事件实时刷新列表
+  - uni-app：`src/realtime.ts` 通过 `uni.connectSocket`（H5/小程序通用）连接原生 WS；
+    `chat/index.vue` 与 `index/index.vue` 订阅消息流；登录成功后自动 connect
+
+### Changed
+- `ConversationService.UpdateCustomerIntention` → `UpdateCustomerIntentionAsync`（async，
+  用于触发 realtime 推送）
+- admin `package.json` 新增 `@microsoft/signalr` 依赖
+
 ## [0.4.0] - 2026-09-01
 
 ### Added

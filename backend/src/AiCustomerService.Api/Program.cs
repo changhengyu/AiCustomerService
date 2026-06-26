@@ -2,7 +2,9 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
+using AiCustomerService.Api.Hubs;
 using AiCustomerService.Api.Localization;
+using AiCustomerService.Api.Realtime;
 using AiCustomerService.Core.Exceptions;
 using AiCustomerService.Core.Interfaces;
 using AiCustomerService.Infrastructure;
@@ -10,10 +12,13 @@ using AiCustomerService.Infrastructure.Data;
 using AiCustomerService.Infrastructure.MultiTenancy;
 using Hangfire;
 using Hangfire.PostgreSql;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -76,10 +81,10 @@ var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "your-very-long-secret-ke
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "AiCustomerService";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "AiCustomerService";
 
-builder.Services.AddAuthentication(Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme)
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(opts =>
     {
-        opts.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+        opts.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
             ValidateAudience = true,
@@ -87,11 +92,37 @@ builder.Services.AddAuthentication(Microsoft.AspNetCore.Authentication.JwtBearer
             ValidateIssuerSigningKey = true,
             ValidIssuer = jwtIssuer,
             ValidAudience = jwtAudience,
-            IssuerSigningKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(
+            IssuerSigningKey = new SymmetricSecurityKey(
                 System.Text.Encoding.UTF8.GetBytes(jwtSecret))
+        };
+        // SignalR 不能走 Authorization 头（浏览器 Web API 限制），
+        // 因此允许通过查询字符串 ?access_token=xxx 完成握手鉴权。
+        opts.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = ctx =>
+            {
+                var accessToken = ctx.Request.Query["access_token"];
+                var path = ctx.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                {
+                    ctx.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
         };
     });
 builder.Services.AddAuthorization();
+
+// ===== SignalR =====
+builder.Services.AddSignalR(opts =>
+{
+    opts.EnableDetailedErrors = builder.Environment.IsDevelopment();
+    opts.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    opts.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+});
+
+// ===== Realtime Notifier =====
+builder.Services.AddScoped<IRealtimeNotifier, SignalRRealtimeNotifier>();
 
 // ===== Hangfire =====
 builder.Services.AddHangfire(cfg => cfg
@@ -239,6 +270,11 @@ app.UseExceptionHandler(errApp =>
 });
 
 // ===== Pipeline =====
+app.UseWebSockets(new WebSocketOptions
+{
+    KeepAliveInterval = TimeSpan.FromSeconds(30)
+});
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -253,6 +289,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health");
+app.MapHub<WorkbenchHub>("/hubs/workbench");
+app.MapWorkbenchWebSocket(); // 原生 WebSocket（供 uni-app 小程序 / H5）
 app.UseHangfireDashboard();
 
 // 注册周期任务

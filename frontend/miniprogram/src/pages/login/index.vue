@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { authApi } from '@/api';
+import { realtime } from '@/realtime';
 
 const form = ref({
   username: '',
@@ -23,6 +24,8 @@ async function submit() {
     uni.setStorageSync('access_token', r.access_token);
     uni.setStorageSync('refresh_token', r.refresh_token);
     uni.setStorageSync('user', r.user);
+    // 登录成功后建立实时连接，让会话列表与详情页能收到推送
+    realtime.connect();
     uni.switchTab({ url: '/pages/index/index' });
   } catch (e: any) {
     errorMsg.value = e?.message || '登录失败，请检查账号信息';

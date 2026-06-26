@@ -20,6 +20,7 @@ public class ConversationService : IConversationService
     private readonly ICacheService _cache;
     private readonly ProfileService _profile;
     private readonly MarketingTriggerService _triggers;
+    private readonly IRealtimeNotifier _realtime;
 
     public ConversationService(
         AppDbContext db,
@@ -28,7 +29,8 @@ public class ConversationService : IConversationService
         ITenantContext tenantCtx,
         ICacheService cache,
         ProfileService profile,
-        MarketingTriggerService triggers)
+        MarketingTriggerService triggers,
+        IRealtimeNotifier realtime)
     {
         _db = db;
         _ai = ai;
@@ -37,6 +39,7 @@ public class ConversationService : IConversationService
         _cache = cache;
         _profile = profile;
         _triggers = triggers;
+        _realtime = realtime;
     }
 
     public async Task<SendMessageResponse> HandleUserMessageAsync(
@@ -150,9 +153,13 @@ public class ConversationService : IConversationService
         _db.Messages.Add(aiMsg);
         conversation.MessageCount += 1;
 
-        UpdateCustomerIntention(customer, hits.Count);
+        await UpdateCustomerIntentionAsync(customer, hits.Count, ct);
 
         await _db.SaveChangesAsync(ct);
+
+        // 实时推送 AI 回复（让客户 / 其他工作台立即看到）
+        await _realtime.NewMessageAsync(tenantId, conversation.Id, aiMsg.Id,
+            "assistant", response.Content, aiMsg.CreatedAt, ct);
 
         return new SendMessageResponse(
             MessageId: aiMsg.Id,
@@ -188,6 +195,10 @@ public class ConversationService : IConversationService
         conv.MessageCount += 1;
         await _db.SaveChangesAsync(ct);
 
+        // 实时推送客服消息（让客户端 / 其他工作台立即看到）
+        await _realtime.NewMessageAsync(conv.TenantId, conv.Id, msg.Id,
+            "agent", content, msg.CreatedAt, ct);
+
         return new SendMessageResponse(msg.Id, conv.Id, content, 0, 0, false);
     }
 
@@ -198,6 +209,10 @@ public class ConversationService : IConversationService
         conv.Status = "human";
         conv.AssignedTo = assignedTo ?? _tenantCtx.CurrentUserId;
         await _db.SaveChangesAsync(ct);
+
+        // 实时推送会话状态变更
+        await _realtime.ConversationStatusChangedAsync(conv.TenantId, conv.Id,
+            conv.Status, conv.AssignedTo, ct);
     }
 
     public async Task CloseConversationAsync(Guid conversationId, CancellationToken ct = default)
@@ -207,6 +222,9 @@ public class ConversationService : IConversationService
         conv.Status = "closed";
         conv.ClosedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
+
+        await _realtime.ConversationStatusChangedAsync(conv.TenantId, conv.Id,
+            conv.Status, conv.AssignedTo, ct);
     }
 
     public async Task<ConversationDetailDto?> GetDetailAsync(Guid conversationId, CancellationToken ct = default)
@@ -281,7 +299,7 @@ public class ConversationService : IConversationService
         return prompt;
     }
 
-    private void UpdateCustomerIntention(Customer customer, int hitCount)
+    private async Task UpdateCustomerIntentionAsync(Customer customer, int hitCount, CancellationToken ct)
     {
         if (hitCount == 0) return;
         var oldLevel = customer.IntentionLevel;
@@ -307,6 +325,9 @@ public class ConversationService : IConversationService
                 to = customer.IntentionLevel,
                 score = customer.IntentionScore
             });
+            // 实时推送意向度变化
+            await _realtime.CustomerIntentionChangedAsync(customer.TenantId, customer.Id,
+                oldLevel, customer.IntentionLevel, customer.IntentionScore, ct);
         }
     }
 }
