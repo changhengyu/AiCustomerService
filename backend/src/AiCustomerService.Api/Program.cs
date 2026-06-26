@@ -242,6 +242,9 @@ if (app.Environment.IsDevelopment())
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
+    // 植入行业 FAQ 种子数据（幂等）
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    AiCustomerService.Infrastructure.Data.IndustryFaqSeeder.SeedAsync(db, logger).GetAwaiter().GetResult();
 }
 
 app.MapGet("/", () => Results.Ok(new

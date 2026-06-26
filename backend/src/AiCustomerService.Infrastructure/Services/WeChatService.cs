@@ -1,11 +1,12 @@
 using System.Xml.Linq;
+using AiCustomerService.Core.Configuration;
 using AiCustomerService.Core.Entities;
-using AiCustomerService.Core.Exceptions;
 using AiCustomerService.Core.Interfaces;
 using AiCustomerService.Infrastructure.Data;
 using AiCustomerService.Infrastructure.WeChat;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace AiCustomerService.Infrastructure.Services;
 
@@ -13,17 +14,20 @@ public class WeChatService : IWeChatService
 {
     private readonly AppDbContext _db;
     private readonly WeChatOfficialClient _official;
+    private readonly WeChatOptions _options;
     private readonly IConversationService _conversation;
     private readonly ILogger<WeChatService> _logger;
 
     public WeChatService(
         AppDbContext db,
         WeChatOfficialClient official,
+        IOptions<WeChatOptions> options,
         IConversationService conversation,
         ILogger<WeChatService> logger)
     {
         _db = db;
         _official = official;
+        _options = options.Value;
         _conversation = conversation;
         _logger = logger;
     }
@@ -55,13 +59,30 @@ public class WeChatService : IWeChatService
         var fromUser = root.Element("FromUserName")?.Value ?? "";
         var toUser = root.Element("ToUserName")?.Value ?? "";
         var msgType = root.Element("MsgType")?.Value ?? "";
-        var content = root.Element("Content")?.Value ?? "";
+        var rawContent = root.Element("Content")?.Value ?? "";
 
         var tenant = await ResolveTenantAsync(appId, toUser, ct);
         if (tenant == null)
         {
             _logger.LogWarning("未找到租户: appId={AppId}", appId);
             return "success";
+        }
+
+        // 解密（兼容明文 + 加密两种模式）
+        string content = rawContent;
+        if (msgType == "text" && IsEncryptedPayload(rawContent, root))
+        {
+            try
+            {
+                var cryptor = new WeChatMessageCryptor(
+                    _options.OfficialToken, _options.EncodingAESKey, appId);
+                content = cryptor.Decrypt(rawContent, out _);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "微信加密消息解密失败: msgId={MsgId}", root.Element("MsgId")?.Value);
+                return "success";
+            }
         }
 
         var customer = await GetOrCreateCustomerAsync(tenant.Id, fromUser, "wechat", ct);
@@ -80,6 +101,17 @@ public class WeChatService : IWeChatService
         }
 
         return "success";
+    }
+
+    /// <summary>
+    /// 判断是否为加密模式：明文模式 Content 是可读字符串，加密模式是 Base64 编码的长字符串。
+    /// 通过 EncodingAESKey 是否配置 + Content 长度判断。
+    /// </summary>
+    private bool IsEncryptedPayload(string content, XElement root)
+    {
+        if (string.IsNullOrEmpty(_options.EncodingAESKey)) return false;
+        // 加密模式 Content 长度通常 > 200
+        return content.Length > 200 || root.Element("Encrypt") != null;
     }
 
     public async Task<Customer> GetOrCreateCustomerAsync(

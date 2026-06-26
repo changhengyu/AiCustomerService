@@ -19,6 +19,8 @@ public class AppDbContext : DbContext
     public DbSet<IntentionRule> IntentionRules => Set<IntentionRule>();
     public DbSet<AiUsageLog> AiUsageLogs => Set<AiUsageLog>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<IndustryFaq> IndustryFaqs => Set<IndustryFaq>();
+    public DbSet<EvalReport> EvalReports => Set<EvalReport>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

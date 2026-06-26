@@ -76,6 +76,71 @@ public interface ITenantService
     Task<TenantSettingsDto> GetSettingsAsync(Guid tenantId, CancellationToken ct = default);
 }
 
+/// <summary>
+/// 行业冷启动 FAQ 服务：新租户注册时自动载入对应行业的常见问答。
+/// 检索时与租户自有知识库合并打分。
+/// </summary>
+public interface IIndustryFaqService
+{
+    Task<List<IndustryFaqDto>> SearchAsync(string industryCode, string query, int topK = 3, CancellationToken ct = default);
+    Task<List<IndustryFaqDto>> ListByIndustryAsync(string industryCode, CancellationToken ct = default);
+    Task<List<string>> ListIndustriesAsync(CancellationToken ct = default);
+}
+
+public record IndustryFaqDto(
+    Guid Id,
+    string IndustryCode,
+    string Question,
+    string Answer,
+    string[] Keywords
+);
+
+/// <summary>
+/// RAG 评测服务：基于 RAGAS 思想的轻量评估
+/// 指标：faithfulness（答案忠实于上下文）/ answer_relevancy / context_precision
+/// </summary>
+public interface IEvaluationService
+{
+    Task<EvaluationReportDto> RunAsync(EvaluationRequestDto request, CancellationToken ct = default);
+    Task<EvaluationReportDto> GetReportAsync(Guid reportId, CancellationToken ct = default);
+    Task<List<EvaluationReportDto>> ListReportsAsync(Guid tenantId, int limit = 20, CancellationToken ct = default);
+}
+
+public record EvaluationRequestDto(
+    Guid TenantId,
+    string DatasetName,
+    List<EvalCaseDto> Cases
+);
+
+public record EvalCaseDto(
+    string Question,
+    string GroundTruthAnswer,
+    string? Context = null
+);
+
+public record EvaluationReportDto(
+    Guid Id,
+    Guid TenantId,
+    string DatasetName,
+    int TotalCases,
+    double FaithfulnessAvg,
+    double AnswerRelevancyAvg,
+    double ContextPrecisionAvg,
+    DateTime StartedAt,
+    DateTime CompletedAt,
+    string Status,
+    List<EvalResultItemDto> Items
+);
+
+public record EvalResultItemDto(
+    string Question,
+    string GeneratedAnswer,
+    string? ReferenceAnswer,
+    double Faithfulness,
+    double AnswerRelevancy,
+    double ContextPrecision
+);
+
 public interface IUnitOfWork
 {
     Task<int> SaveChangesAsync(CancellationToken ct = default);

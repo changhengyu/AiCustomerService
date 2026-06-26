@@ -307,13 +307,24 @@ server {
 - [x] uni-app 移动工作台
 - [x] Docker Compose 部署
 
-### 🚧 v0.2.0（计划 2026-07）
+### ✅ v0.2.0（已发布 2026-07-15）
 
-- [ ] 评测框架（RAGAS）支持
-- [ ] 行业冷启动 FAQ 包（电商、教育、SaaS）
-- [ ] 多模态文档（图、表识别）
-- [ ] Rate Limiting 中间件
-- [ ] 微信消息加密完整支持
+- [x] Microsoft.Extensions.AI 重构（IChatClient / IEmbeddingGenerator）
+- [x] 行业冷启动 FAQ 包（6 行业 50+ 条）
+- [x] 微信消息加密完整实现（AES-256-CBC + PKCS#7）
+- [x] PDF 多模态识别（图探测 + 表格抽取）
+- [x] RAGAS 评测端点（faithfulness / answer_relevancy / context_precision）
+- [x] Rate Limiting 中间件（4 策略）
+- [x] TrialEndsAt + IndustryCode 字段
+
+### 🚧 v0.3.0+（规划）
+
+- [ ] 多 LLM 适配器（OpenAI、DeepSeek、Claude）
+- [ ] Function Calling 智能体工作流
+- [ ] 客户画像与精准营销
+- [ ] 语音消息支持
+- [ ] BI 报表
+- [ ] 开放 API 与 Webhook
 
 ### 🔮 v0.3.0+
 

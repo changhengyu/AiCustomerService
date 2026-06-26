@@ -63,7 +63,7 @@ public static class DependencyInjection
         services.AddSingleton<TextCleaner>();
         services.AddSingleton<TextSplitter>();
         services.AddSingleton<DocumentLoader>();
-        services.AddSingleton<EmbeddingBatcher>();
+        services.AddScoped<EmbeddingBatcher>();
         services.AddScoped<PgVectorStore>();
         services.AddScoped<HybridRetriever>();
 
@@ -92,6 +92,8 @@ public static class DependencyInjection
         services.AddScoped<ICustomerService, CustomerService>();
         services.AddScoped<ITenantService, TenantService>();
         services.AddScoped<IWeChatService, WeChatService>();
+        services.AddScoped<IIndustryFaqService, IndustryFaqService>();
+        services.AddScoped<IEvaluationService, EvaluationService>();
 
         return services;
     }

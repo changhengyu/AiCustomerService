@@ -11,12 +11,27 @@
 - 后端：通义千问 AI 集成（qwen-plus + text-embedding-v3）
 - 后端：JWT 认证 + Refresh Token 机制
 - 后端：多租户架构（TenantContext）
-- 后端：7 个 REST API Controller
-- 后端：微信公众台回调（验签 + XML 消息接收）
+- 后端：8 个 REST API Controller
+- 后端：微信公众台回调（验签 + XML 消息接收 + 完整 AES-256-CBC 加密）
 - 前端：Vue 3 + Element Plus 后台管理
-- 前端：uni-app 跨端客服工作台（基础版）
+- 前端：uni-app 跨端客服工作台（精修版）
 - 部署：Docker Compose 一键启动
 - 文档：完整 README + 开发指南 + API 文档 + 架构设计
+
+## [0.2.0] - 2026-07-15
+
+### Added
+- 行业冷启动 FAQ 包：6 个行业 50+ 条（general/ecommerce/education/saas/finance/medical），
+  启动时自动 seed，支持按 industry_code + 关键词检索
+- 微信消息加密完整实现：WeChatMessageCryptor 支持 AES-256-CBC + PKCS#7，
+  兼容明文与加密双模式
+- PDF 多模态识别：图像探测 + 表格启发式抽取（Tab 分隔 + 多空格对齐）
+- RAGAS 评测端点：faithfulness / answer_relevancy / context_precision 三指标，
+  支持评测集运行与历史报告查询
+- Microsoft.Extensions.AI 重构：IChatClient / IEmbeddingGenerator 抽象
+- Rate Limiting 中间件：4 个命名策略（登录/注册/上传/聊天）
+- TrialEndsAt + IndustryCode 字段：注册自动设 14 天试用
+- 2 个 EF Core 迁移（AddTenantTrialFields + AddIndustryFaq）
 
 ## [0.1.0] - 2026-06-26
 
@@ -39,5 +54,6 @@
 - 后台前端页面：8 个 Vue 单文件组件
 - 移动端页面：5 个 uni-app 页面（含登录页精修版）
 
-[Unreleased]: https://github.com/changhengyu/AiCustomerService/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/changhengyu/AiCustomerService/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/changhengyu/AiCustomerService/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/changhengyu/AiCustomerService/releases/tag/v0.1.0

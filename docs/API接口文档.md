@@ -313,6 +313,48 @@ Content-Type：`application/xml`
 
 ---
 
+## 8. 行业冷启动 FAQ（v0.2.0）
+
+### 8.1 列出本租户行业全部 FAQ
+
+**GET** `/industry-faqs`
+
+### 8.2 列出所有行业代码
+
+**GET** `/industry-faqs/industries`（无需鉴权）
+
+### 8.3 关键词检索
+
+**GET** `/industry-faqs/search?industryCode=ecommerce&q=退款&topK=3`
+
+---
+
+## 9. RAGAS 评测（v0.2.0 内部用）
+
+### 9.1 运行评测
+
+**POST** `/eval/run`
+
+请求体：
+```json
+{
+  "dataset_name": "smoke-test",
+  "cases": [
+    { "question": "...", "ground_truth_answer": "..." }
+  ]
+}
+```
+
+### 9.2 获取报告
+
+**GET** `/eval/reports/{id}`
+
+### 9.3 报告历史
+
+**GET** `/eval/reports?limit=20`
+
+---
+
 ## 错误码参考
 
 | code | HTTP | 触发条件 |
