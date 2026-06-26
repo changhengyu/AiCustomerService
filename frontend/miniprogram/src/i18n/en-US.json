@@ -1,0 +1,31 @@
+{
+  "app": {
+    "title": "AI Customer Service"
+  },
+  "login": {
+    "title": "Login",
+    "username": "Username",
+    "password": "Password",
+    "submit": "Sign in",
+    "registerHint": "No account? Register",
+    "register": "Register"
+  },
+  "index": {
+    "title": "Workspace",
+    "stats": { "conversations": "Conversations", "customers": "Customers", "messages": "Messages" },
+    "recentConversations": "Recent Conversations",
+    "empty": "No conversations yet"
+  },
+  "chat": {
+    "input": "Type a message…",
+    "send": "Send",
+    "aiTyping": "AI is thinking…",
+    "closed": "Conversation closed"
+  },
+  "profile": {
+    "title": "Profile",
+    "settings": "Settings",
+    "language": "Language",
+    "logout": "Sign out"
+  }
+}

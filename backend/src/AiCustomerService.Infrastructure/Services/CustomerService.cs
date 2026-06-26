@@ -74,7 +74,7 @@ public class CustomerService : ICustomerService
         Guid tenantId, Guid customerId, string[] tags, CancellationToken ct = default)
     {
         var c = await _db.Customers.FirstOrDefaultAsync(x => x.Id == customerId && x.TenantId == tenantId, ct)
-            ?? throw new NotFoundException("客户不存在");
+            ?? throw new NotFoundException("Customer.NotFound");
         c.Tags = tags ?? Array.Empty<string>();
         await _db.SaveChangesAsync(ct);
     }

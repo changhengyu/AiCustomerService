@@ -1,0 +1,31 @@
+{
+  "app": {
+    "title": "AI 客服工作台"
+  },
+  "login": {
+    "title": "登录",
+    "username": "用户名",
+    "password": "密码",
+    "submit": "登录",
+    "registerHint": "还没有账号？立即注册",
+    "register": "注册"
+  },
+  "index": {
+    "title": "工作台",
+    "stats": { "conversations": "会话数", "customers": "客户数", "messages": "消息数" },
+    "recentConversations": "最近会话",
+    "empty": "暂无会话"
+  },
+  "chat": {
+    "input": "输入消息…",
+    "send": "发送",
+    "aiTyping": "AI 正在思考…",
+    "closed": "会话已结束"
+  },
+  "profile": {
+    "title": "我的",
+    "settings": "设置",
+    "language": "语言",
+    "logout": "退出登录"
+  }
+}

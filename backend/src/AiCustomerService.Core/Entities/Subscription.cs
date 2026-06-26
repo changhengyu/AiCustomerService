@@ -18,18 +18,6 @@ public class Subscription
     public Tenant? Tenant { get; set; }
 }
 
-public class IntentionRule
-{
-    public Guid Id { get; set; } = Guid.NewGuid();
-    public Guid TenantId { get; set; }
-    public string RuleName { get; set; } = string.Empty;
-    public string[] Keywords { get; set; } = Array.Empty<string>();
-    public int ScoreDelta { get; set; }
-    public string? TargetLevel { get; set; }
-    public bool IsActive { get; set; } = true;
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-}
-
 public class AiUsageLog
 {
     public Guid Id { get; set; } = Guid.NewGuid();

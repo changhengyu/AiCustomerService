@@ -326,13 +326,21 @@ server {
 - [x] BI 报表（overview / trend / intention / hot-questions / ai-usage）
 - [x] 开放 API 与 Webhook（API Key + HMAC 签名 Outbox 投递）
 
-### 🔮 v0.4.0+
+### ✅ v0.4.0+（2026-09）
 
-- [ ] 客户画像与精准营销
-- [ ] 语音消息支持
-- [ ] SaaS 计费与订阅中心（Stripe / 微信支付）
-- [ ] 多语言国际化
-- [ ] Agent 评估与可观测（Langfuse / Phoenix 集成）
+- [x] 客户画像与精准营销（Customer 扩展 + Segment + MarketingTrigger + 时间线）
+- [x] 语音消息支持（阿里云一句话识别 + multipart upload + 微信 voice 分支）
+- [x] SaaS 计费与订阅中心（Stripe + 微信支付 + PlanPolicy 集中化 + TrialExpiry）
+- [x] 多语言国际化（.resx + vue-i18n + uni-i18n，zh-CN / en-US）
+- [x] Agent 可观测（OpenTelemetry Tracing + Metrics + OTLP exporter）
+
+### 🔮 v0.5.0+
+
+- [ ] TTS 语音合成（Edge-TTS / 阿里云语音合成）
+- [ ] 多模态视觉理解（GPT-4V / Qwen-VL）
+- [ ] Agent 评估与可观测深度集成（Langfuse / Phoenix）
+- [ ] 工单系统
+- [ ] 移动端原生 App（React Native）
 
 ---
 

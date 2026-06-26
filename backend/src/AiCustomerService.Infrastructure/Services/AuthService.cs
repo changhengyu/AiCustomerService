@@ -69,13 +69,13 @@ public class AuthService : IAuthService
             .FirstOrDefaultAsync(u => u.Username == request.Username, ct);
 
         if (user == null || !VerifyPassword(request.Password, user.PasswordHash))
-            throw new UnauthorizedException("用户名或密码错误");
+            throw new UnauthorizedException("Auth.LoginFailed");
 
         if (user.Status != "active")
-            throw new ForbiddenException("用户已停用");
+            throw new ForbiddenException("Auth.Forbidden");
 
         if (user.Tenant.Status != "active")
-            throw new ForbiddenException("租户已停用");
+            throw new ForbiddenException("Auth.TenantDisabled");
 
         user.LastLoginAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
@@ -90,7 +90,7 @@ public class AuthService : IAuthService
             .FirstOrDefaultAsync(r => r.Token == refreshToken, ct);
 
         if (stored == null || stored.ExpiresAt < DateTime.UtcNow || stored.RevokedAt != null)
-            throw new UnauthorizedException("Refresh Token 无效或已过期");
+            throw new UnauthorizedException("Auth.Unauthorized");
 
         stored.RevokedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);

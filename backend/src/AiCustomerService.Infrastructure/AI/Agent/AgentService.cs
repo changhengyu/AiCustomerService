@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using AiCustomerService.Core.DTOs.AI;
 using AiCustomerService.Core.Interfaces;
+using AiCustomerService.Infrastructure.Observability;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -39,6 +40,9 @@ public class AgentService
     /// </summary>
     public async Task<AgentChatResponse> ChatAsync(AgentChatRequest request, CancellationToken ct = default)
     {
+        using var span = AppActivitySource.Source.StartActivity("agent.chat");
+        span?.SetTag("llm.provider", request.Provider ?? "default");
+        span?.SetTag("llm.model", request.Model);
         var sw = Stopwatch.StartNew();
         var provider = string.IsNullOrEmpty(request.Provider) ? _options.DefaultProvider : request.Provider;
         var rawClient = _providerFactory.GetChatClient(provider);
@@ -71,6 +75,11 @@ public class AgentService
                 .Select(c => c.Name)
                 .Distinct()
                 .ToList();
+
+            span?.SetTag("agent.tools_called", string.Join(",", calledTools));
+            span?.SetTag("agent.iterations", calledTools.Count);
+            AppMeter.ChatLatency.Record(sw.ElapsedMilliseconds,
+                new KeyValuePair<string, object?>("channel", "agent"));
 
             return new AgentChatResponse(
                 Content: response.Messages.LastOrDefault()?.Text ?? string.Empty,

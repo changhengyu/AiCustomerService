@@ -18,5 +18,13 @@ public class Message
     public DateTime? FeedbackAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    // ===== 媒体消息字段（语音 / 图片 / 文件） =====
+    public string? MediaUrl { get; set; }
+    public string? MediaLocalPath { get; set; }
+    public int? DurationSeconds { get; set; }
+    public string? Transcript { get; set; }
+    public string? SttProvider { get; set; }
+    public string? MimeType { get; set; }
+
     public Conversation? Conversation { get; set; }
 }

@@ -5,5 +5,6 @@ public static class MessageType
     public const string Text = "text";
     public const string Image = "image";
     public const string File = "file";
+    public const string Voice = "voice";
     public const string Event = "event";
 }

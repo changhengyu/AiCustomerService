@@ -6,6 +6,7 @@ using AiCustomerService.Core.Exceptions;
 using AiCustomerService.Core.Interfaces;
 using AiCustomerService.Infrastructure.AI.RAG;
 using AiCustomerService.Infrastructure.Data;
+using AiCustomerService.Infrastructure.Observability;
 using Microsoft.EntityFrameworkCore;
 
 namespace AiCustomerService.Infrastructure.Services;
@@ -17,35 +18,45 @@ public class ConversationService : IConversationService
     private readonly HybridRetriever _retriever;
     private readonly ITenantContext _tenantCtx;
     private readonly ICacheService _cache;
+    private readonly ProfileService _profile;
+    private readonly MarketingTriggerService _triggers;
 
     public ConversationService(
         AppDbContext db,
         IAIService ai,
         HybridRetriever retriever,
         ITenantContext tenantCtx,
-        ICacheService cache)
+        ICacheService cache,
+        ProfileService profile,
+        MarketingTriggerService triggers)
     {
         _db = db;
         _ai = ai;
         _retriever = retriever;
         _tenantCtx = tenantCtx;
         _cache = cache;
+        _profile = profile;
+        _triggers = triggers;
     }
 
     public async Task<SendMessageResponse> HandleUserMessageAsync(
         Guid tenantId, Guid customerId, string content,
         Guid? conversationId = null, CancellationToken ct = default)
     {
+        using var span = AppActivitySource.Source.StartActivity("chat.handle_user_message");
+        span?.SetTag("tenant.id", tenantId);
+        span?.SetTag("customer.id", customerId);
+
         var customer = await _db.Customers
             .FirstOrDefaultAsync(c => c.Id == customerId && c.TenantId == tenantId, ct)
-            ?? throw new NotFoundException("客户不存在");
+            ?? throw new NotFoundException("Customer.NotFound");
 
         Conversation conversation;
         if (conversationId.HasValue)
         {
             conversation = await _db.Conversations
                 .FirstOrDefaultAsync(c => c.Id == conversationId.Value && c.TenantId == tenantId, ct)
-                ?? throw new NotFoundException("会话不存在");
+                ?? throw new NotFoundException("Conversation.NotFound");
         }
         else
         {
@@ -76,7 +87,15 @@ public class ConversationService : IConversationService
         conversation.LastMessageAt = DateTime.UtcNow;
         conversation.MessageCount += 1;
 
-        var hits = await _retriever.RetrieveAsync(tenantId, content, topK: 5, minScore: 0.45, ct);
+        List<RetrievalHit> hits;
+        using (var retrieveSpan = AppActivitySource.Source.StartActivity("rag.retrieve"))
+        {
+            retrieveSpan?.SetTag("rag.top_k", 5);
+            retrieveSpan?.SetTag("rag.min_score", 0.45);
+            hits = await _retriever.RetrieveAsync(tenantId, content, topK: 5, minScore: 0.45, ct);
+            retrieveSpan?.SetTag("rag.hit_count", hits.Count);
+            AppMeter.RetrievalHits.Add(hits.Count);
+        }
         var contextBlocks = string.Join("\n\n---\n\n",
             hits.Select((h, i) => $"[参考 {i + 1}] {h.Chunk.Content}"));
 
@@ -98,7 +117,21 @@ public class ConversationService : IConversationService
             MaxTokens: 2000,
             SystemPrompt: sysPrompt);
 
-        var response = await _ai.ChatAsync(request, ct);
+        ChatResponse response;
+        using (var llmSpan = AppActivitySource.Source.StartActivity("llm.chat"))
+        {
+            llmSpan?.SetTag("llm.model", request.Model);
+            response = await _ai.ChatAsync(request, ct);
+            llmSpan?.SetTag("llm.tokens_total", response.TotalTokens);
+            llmSpan?.SetTag("llm.tokens_prompt", response.PromptTokens);
+            llmSpan?.SetTag("llm.tokens_completion", response.CompletionTokens);
+        }
+
+        AppMeter.ChatTokens.Add(response.PromptTokens,
+            new KeyValuePair<string, object?>("role", "prompt"));
+        AppMeter.ChatTokens.Add(response.CompletionTokens,
+            new KeyValuePair<string, object?>("role", "completion"));
+        AppMeter.ChatLatency.Record(response.LatencyMs);
 
         var aiMsg = new Message
         {
@@ -136,9 +169,9 @@ public class ConversationService : IConversationService
     {
         var conv = await _db.Conversations
             .FirstOrDefaultAsync(c => c.Id == conversationId, ct)
-            ?? throw new NotFoundException("会话不存在");
+            ?? throw new NotFoundException("Conversation.NotFound");
         var agentId = _tenantCtx.CurrentUserId
-            ?? throw new UnauthorizedException("未识别客服");
+            ?? throw new UnauthorizedException("Auth.Unauthorized");
 
         var msg = new Message
         {
@@ -161,7 +194,7 @@ public class ConversationService : IConversationService
     public async Task HandoffToHumanAsync(Guid conversationId, Guid? assignedTo, CancellationToken ct = default)
     {
         var conv = await _db.Conversations.FirstOrDefaultAsync(c => c.Id == conversationId, ct)
-            ?? throw new NotFoundException("会话不存在");
+            ?? throw new NotFoundException("Conversation.NotFound");
         conv.Status = "human";
         conv.AssignedTo = assignedTo ?? _tenantCtx.CurrentUserId;
         await _db.SaveChangesAsync(ct);
@@ -170,7 +203,7 @@ public class ConversationService : IConversationService
     public async Task CloseConversationAsync(Guid conversationId, CancellationToken ct = default)
     {
         var conv = await _db.Conversations.FirstOrDefaultAsync(c => c.Id == conversationId, ct)
-            ?? throw new NotFoundException("会话不存在");
+            ?? throw new NotFoundException("Conversation.NotFound");
         conv.Status = "closed";
         conv.ClosedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
@@ -248,13 +281,32 @@ public class ConversationService : IConversationService
         return prompt;
     }
 
-    private static void UpdateCustomerIntention(Customer customer, int hitCount)
+    private void UpdateCustomerIntention(Customer customer, int hitCount)
     {
         if (hitCount == 0) return;
+        var oldLevel = customer.IntentionLevel;
         customer.IntentionScore = Math.Min(100, customer.IntentionScore + 5);
         if (customer.IntentionScore >= 80) customer.IntentionLevel = "high";
         else if (customer.IntentionScore >= 40) customer.IntentionLevel = "medium";
         else customer.IntentionLevel = "low";
         customer.LastSeenAt = DateTime.UtcNow;
+
+        // 触发营销事件 + 写入时间线
+        if (oldLevel != customer.IntentionLevel)
+        {
+            _profile.AppendTimeline(customer.TenantId, customer.Id, "customer.intention_changed",
+                System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    from = oldLevel, to = customer.IntentionLevel, score = customer.IntentionScore
+                }));
+            // Fire-and-forget：触发器匹配 + webhook
+            _ = _triggers.OnEventAsync(customer.TenantId, "customer.intention_changed", new
+            {
+                customerId = customer.Id,
+                from = oldLevel,
+                to = customer.IntentionLevel,
+                score = customer.IntentionScore
+            });
+        }
     }
 }

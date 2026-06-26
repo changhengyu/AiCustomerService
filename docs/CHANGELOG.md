@@ -4,10 +4,46 @@
 
 ## [Unreleased]
 
-### Planned
-- 客户画像与精准营销（v0.4.0）
-- 语音消息支持（v0.4.0）
-- SaaS 计费与订阅中心（v0.4.0）
+## [0.4.0] - 2026-09-01
+
+### Added
+- **Agent 可观测**：OpenTelemetry 集成（Tracing + Metrics），`ActivitySource` 注入 chat/retrieval/llm/tool/agent 五大 span，
+  Meter 暴露 chat_tokens / chat_latency / tool_call_latency / retrieval_hits / stt_calls 指标，
+  OTLP exporter（默认指向 `http://localhost:4317`）+ 可选 Console exporter
+- **i18n 全栈**：后端 .resx 资源文件（zh-CN/en-US）+ `IStringLocalizer` + `LocalizedExceptionMiddleware`
+  （ApiException 消息自动翻译）；前端 admin 集成 vue-i18n 9 + LocaleSwitcher 顶栏组件；
+  前端 uni-app 自实现 $t + 设置页切换；`/api/v1/culture/current` 端点返回支持列表
+- **客户画像与精准营销**：Customer 扩展（Email / LifecycleStage / Source / LastProfileUpdateAt），
+  4 个新实体（`CustomerSegment` / `MarketingTrigger` / `CustomerNote` / `CustomerTimelineEvent`），
+  `IntentionRule` 表激活注册；`ProfileService`（画像 + 完整度评分） +
+  `SegmentService`（规则评估 + 每日重算） + `MarketingTriggerService`（事件 → 动作：add_tag/add_note/webhook）；
+  3 个新 Controller：`ProfileController` / `SegmentController` / `MarketingTriggerController`；
+  意向度变化自动触发 `customer.intention_changed` 事件 + 时间线追加
+- **SaaS 计费与订阅中心**：`Subscription` 表注册 + `PlanPolicyOptions` 集中化策略 +
+  `IPaymentProvider` 抽象 + 3 个实现（Noop 沙箱 / Stripe Checkout / 微信支付 V3）；
+  `BillingController` 5 个端点（plans / checkout / webhook / history / cancel）；
+  `TrialExpiryJob` 每日扫描过期试用租户；
+  `WebhookDispatchJob` 每分钟投递 Outbox；
+  `SubscriptionService` 处理入账事件 → 写状态 + 触发 `subscription.activated/expired/cancelled` 事件
+- **语音消息**：`MessageType.voice` 枚举值 + Message 实体加 MediaUrl/MediaLocalPath/
+  DurationSeconds/Transcript/SttProvider/MimeType 字段；`IAiSttProvider` +
+  `AliyunSttProvider`（阿里云一句话识别）+ `NoopSttProvider`；
+  `ChatController.SendVoice` 接收 multipart upload；
+  `WeChatOfficialClient.DownloadMediaAsync` 下载微信临时素材；
+  `WeChatService` 加 `msgType=voice` 分支（下载 → STT → 走 chat pipeline → 回复）；
+  `message.voice_received` webhook 事件
+- **新 NuGet**：OpenTelemetry 全家桶（Tracing/Metrics/AspNetCore/Http/EF/Runtime/OTLP/Console）、
+  Microsoft.Extensions.Localization、Stripe.net 47.0.0
+
+### Changed
+- `ApiException` 抛错方式：`throw new NotFoundException("Customer.NotFound")`（resource key）
+- `Program.cs` 注册 Hangfire 周期任务 + AddAppTelemetry + UseRequestLocalization + LocalizedExceptionMiddleware
+- `appsettings.json` 增加 `PlanPolicy` / `Stripe` / `WeChatPay` / `OpenTelemetry` 配置节
+
+### Notes
+- v0.4.0 全功能首次完整闭环：营销事件触发 webhook → webhook Outbox 自动投递 →
+  订阅入账事件触发套餐变更 → 套餐限制影响 rate limiter（已读 `PlanPolicy`）
+- 默认 OTLP collector 未启动时 OpenTelemetry 自适应不报错
 
 ## [0.3.0] - 2026-08-01
 

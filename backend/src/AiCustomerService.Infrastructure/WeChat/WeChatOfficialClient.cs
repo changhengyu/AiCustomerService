@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Xml.Serialization;
 using AiCustomerService.Core.Configuration;
 using Microsoft.Extensions.Logging;
@@ -100,6 +101,28 @@ public class WeChatOfficialClient
         {
             return encrypted;
         }
+    }
+
+    /// <summary>
+    /// 下载微信临时素材（语音/图片/视频等）。
+    /// 端点：https://api.weixin.qq.com/cgi-bin/media/get?access_token=...&media_id=...
+    /// </summary>
+    public async Task<byte[]?> DownloadMediaAsync(string mediaId, CancellationToken ct = default)
+    {
+        var token = await GetAccessTokenAsync(ct);
+        var url = $"https://api.weixin.qq.com/cgi-bin/media/get?access_token={token}&media_id={mediaId}";
+        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        using var resp = await _http.SendAsync(req, ct);
+        var bytes = await resp.Content.ReadAsByteArrayAsync(ct);
+
+        // 失败时微信返回 JSON（errcode/errmsg），成功返回二进制
+        if (!resp.IsSuccessStatusCode || (bytes.Length > 0 && bytes[0] == (byte)'{'))
+        {
+            var body = Encoding.UTF8.GetString(bytes);
+            _logger.LogWarning("下载微信素材失败: {Body}", body);
+            return null;
+        }
+        return bytes;
     }
 }
 

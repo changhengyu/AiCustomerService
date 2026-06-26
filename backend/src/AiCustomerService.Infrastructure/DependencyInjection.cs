@@ -3,6 +3,7 @@ using AiCustomerService.Core.Interfaces;
 using AiCustomerService.Infrastructure.AI;
 using AiCustomerService.Infrastructure.AI.Agent;
 using AiCustomerService.Infrastructure.AI.RAG;
+using AiCustomerService.Infrastructure.AI.Stt;
 using AiCustomerService.Infrastructure.AI.Tongyi;
 using AiCustomerService.Infrastructure.Cache;
 using AiCustomerService.Infrastructure.Jobs;
@@ -10,11 +11,14 @@ using AiCustomerService.Infrastructure.MultiTenancy;
 using AiCustomerService.Infrastructure.Security;
 using AiCustomerService.Infrastructure.Services;
 using AiCustomerService.Infrastructure.WeChat;
+using AiCustomerService.Infrastructure.Observability;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using OpenAI;
 using StackExchange.Redis;
+using AiCustomerService.Infrastructure.Payments;
 
 namespace AiCustomerService.Infrastructure;
 
@@ -22,11 +26,17 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config)
     {
+        // 可观测（OpenTelemetry）
+        services.AddAppTelemetry(config);
+
         // Options
         services.Configure<TongyiOptions>(config.GetSection(TongyiOptions.SectionName));
         services.Configure<JwtOptions>(config.GetSection(JwtOptions.SectionName));
         services.Configure<WeChatOptions>(config.GetSection(WeChatOptions.SectionName));
         services.Configure<AiProviderOptions>(config.GetSection(AiProviderOptions.SectionName));
+        services.Configure<PlanPolicyOptions>(config.GetSection(PlanPolicyOptions.SectionName));
+        services.Configure<StripeOptions>(config.GetSection(StripeOptions.SectionName));
+        services.Configure<WeChatPayOptions>(config.GetSection(WeChatPayOptions.SectionName));
 
         var tongyi = config.GetSection(TongyiOptions.SectionName).Get<TongyiOptions>()
             ?? new TongyiOptions();
@@ -61,11 +71,36 @@ public static class DependencyInjection
         // 多 LLM 适配器工厂（v0.3.0+）
         services.AddSingleton<IAiProviderFactory, AiProviderFactory>();
 
+        // STT（v0.4.0+）
+        services.Configure<AliyunSttOptions>(config.GetSection(AliyunSttOptions.SectionName));
+        services.AddHttpClient("stt");
+        services.AddSingleton<AiCustomerService.Infrastructure.AI.Stt.IAiSttProvider>(sp =>
+        {
+            var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AliyunSttOptions>>().Value;
+            return !string.IsNullOrEmpty(opts.AppKey)
+                ? new AiCustomerService.Infrastructure.AI.Stt.AliyunSttProvider(
+                    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AliyunSttOptions>>(),
+                    sp.GetRequiredService<IHttpClientFactory>(),
+                    sp.GetRequiredService<ILogger<AiCustomerService.Infrastructure.AI.Stt.AliyunSttProvider>>())
+                : new AiCustomerService.Infrastructure.AI.Stt.NoopSttProvider();
+        });
+
         // 智能体（Function Calling）
         services.AddScoped<CustomerServiceTools>();
         services.AddScoped<AgentService>();
         services.AddScoped<BiService>();
         services.AddScoped<OpenApiService>();
+        services.AddScoped<ProfileService>();
+        services.AddScoped<SegmentService>();
+        services.AddScoped<MarketingTriggerService>();
+        services.AddScoped<SubscriptionService>();
+        services.AddScoped<Jobs.TrialExpiryJob>();
+        services.AddScoped<Jobs.WebhookDispatchJob>();
+
+        // 支付提供方（多注册）
+        services.AddSingleton<IPaymentProvider, NoopPaymentProvider>();
+        services.AddSingleton<IPaymentProvider, StripePaymentProvider>();
+        services.AddSingleton<IPaymentProvider, WeChatPayProvider>();
 
         // WeChat（仍用 HttpClient，因为微信 API 不在 AI 范畴）
         services.AddHttpClient<WeChatOfficialClient>();

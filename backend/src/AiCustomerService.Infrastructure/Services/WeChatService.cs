@@ -2,6 +2,7 @@ using System.Xml.Linq;
 using AiCustomerService.Core.Configuration;
 using AiCustomerService.Core.Entities;
 using AiCustomerService.Core.Interfaces;
+using AiCustomerService.Infrastructure.AI.Stt;
 using AiCustomerService.Infrastructure.Data;
 using AiCustomerService.Infrastructure.WeChat;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +17,7 @@ public class WeChatService : IWeChatService
     private readonly WeChatOfficialClient _official;
     private readonly WeChatOptions _options;
     private readonly IConversationService _conversation;
+    private readonly IAiSttProvider _stt;
     private readonly ILogger<WeChatService> _logger;
 
     public WeChatService(
@@ -23,12 +25,14 @@ public class WeChatService : IWeChatService
         WeChatOfficialClient official,
         IOptions<WeChatOptions> options,
         IConversationService conversation,
+        IAiSttProvider stt,
         ILogger<WeChatService> logger)
     {
         _db = db;
         _official = official;
         _options = options.Value;
         _conversation = conversation;
+        _stt = stt;
         _logger = logger;
     }
 
@@ -92,6 +96,48 @@ public class WeChatService : IWeChatService
             var resp = await _conversation.HandleUserMessageAsync(
                 tenant.Id, customer.Id, content, conversationId: null, ct);
 
+            await _official.SendCustomerTextAsync(fromUser, resp.Reply, ct);
+        }
+        else if (msgType == "voice")
+        {
+            var mediaId = root.Element("MediaId")?.Value ?? "";
+            var format = root.Element("Format")?.Value ?? "amr";
+
+            // 下载微信临时素材
+            byte[]? audioBytes = null;
+            try
+            {
+                audioBytes = await _official.DownloadMediaAsync(mediaId, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "下载微信语音素材失败: mediaId={MediaId}", mediaId);
+                return "success";
+            }
+
+            if (audioBytes == null || audioBytes.Length == 0) return "success";
+
+            // STT
+            string transcript;
+            try
+            {
+                using var ms = new MemoryStream(audioBytes);
+                var sttResult = await _stt.RecognizeAsync(ms, format, ct);
+                transcript = sttResult.Text;
+                _logger.LogInformation("微信语音转写: {Text}", transcript);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "微信 STT 失败");
+                await _official.SendCustomerTextAsync(fromUser, "语音识别失败，请稍后再试或改用文字。", ct);
+                return "success";
+            }
+
+            if (string.IsNullOrWhiteSpace(transcript)) return "success";
+
+            // 走相同 chat pipeline
+            var resp = await _conversation.HandleUserMessageAsync(
+                tenant.Id, customer.Id, transcript, conversationId: null, ct);
             await _official.SendCustomerTextAsync(fromUser, resp.Reply, ct);
         }
         else if (msgType == "event")

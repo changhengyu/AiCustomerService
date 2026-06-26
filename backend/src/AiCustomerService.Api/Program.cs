@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
+using AiCustomerService.Api.Localization;
 using AiCustomerService.Core.Exceptions;
 using AiCustomerService.Core.Interfaces;
 using AiCustomerService.Infrastructure;
@@ -8,6 +10,7 @@ using AiCustomerService.Infrastructure.Data;
 using AiCustomerService.Infrastructure.MultiTenancy;
 using Hangfire;
 using Hangfire.PostgreSql;
+using Microsoft.AspNetCore.Localization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -30,6 +33,20 @@ builder.Services.AddDbContext<AppDbContext>(opts =>
 
 // ===== Infrastructure (AI / Cache / WeChat / Hangfire Jobs / JWT / Tenant) =====
 builder.Services.AddInfrastructure(builder.Configuration);
+
+// ===== i18n（本地化）=====
+builder.Services.AddLocalization(o => o.ResourcesPath = "Resources");
+builder.Services.Configure<RequestLocalizationOptions>(o =>
+{
+    var cultures = new[] { new CultureInfo("zh-CN"), new CultureInfo("en-US") };
+    o.DefaultRequestCulture = new RequestCulture("zh-CN");
+    o.SupportedCultures = cultures;
+    o.SupportedUICultures = cultures;
+    o.RequestCultureProviders = new IRequestCultureProvider[]
+    {
+        new AcceptLanguageHeaderRequestCultureProvider()
+    };
+});
 
 // ===== Controllers =====
 builder.Services.AddControllers()
@@ -228,6 +245,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseSerilogRequestLogging();
+app.UseRequestLocalization();
+app.UseMiddleware<LocalizedExceptionMiddleware>();
 app.UseCors();
 app.UseRateLimiter();
 app.UseAuthentication();
@@ -235,6 +254,16 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health");
 app.UseHangfireDashboard();
+
+// 注册周期任务
+using (var scope = app.Services.CreateScope())
+{
+    var jobMgr = scope.ServiceProvider.GetRequiredService<Hangfire.IRecurringJobManager>();
+    jobMgr.AddOrUpdate<AiCustomerService.Infrastructure.Jobs.TrialExpiryJob>(
+        "trial-expiry-daily", j => j.RunAsync(CancellationToken.None), Hangfire.Cron.Daily(3));
+    jobMgr.AddOrUpdate<AiCustomerService.Infrastructure.Jobs.WebhookDispatchJob>(
+        "webhook-dispatch-minute", j => j.RunAsync(CancellationToken.None), Hangfire.Cron.Minutely());
+}
 
 // 自动迁移（开发环境）
 if (app.Environment.IsDevelopment())

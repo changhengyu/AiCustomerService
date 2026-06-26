@@ -507,4 +507,166 @@ X-Webhook-Delivery: <delivery-uuid>
 
 **重试策略**：指数退避 1 → 2 → 4 → 8 → 16 → 32 分钟，最多 6 次；6 次后状态置 `failed`。
 
+## 13. 客户画像（v0.4.0+）
+
+### GET `/api/v1/profile/{customerId}`
+
+返回客户完整画像（含 notes、timeline、segments、完整度评分 0-100）。
+
+### PATCH `/api/v1/profile/{customerId}`
+
+更新画像（Email / Nickname / Phone / Region / Gender / Source / LifecycleStage / Tags）；
+自动写入 `customer.profile_updated` 时间线事件 + 触发 `customer.profile_updated` webhook。
+
+### POST `/api/v1/profile/{customerId}/notes`
+
+```json
+{ "content": "客户偏好中文沟通" }
+```
+
+返回新增备注 + 触发 `customer.note_added` 时间线事件。
+
+## 14. 客户分群与营销触发器（v0.4.0+）
+
+### 分群
+
+| Method | Path | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/v1/segments` | 列出全部 segment |
+| `POST` | `/api/v1/segments` | 创建 segment |
+| `DELETE` | `/api/v1/segments/{id}` | 删除 |
+| `POST` | `/api/v1/segments/{id}/evaluate` | 重新计算 member_count |
+| `GET` | `/api/v1/segments/{id}/members?limit=200` | 列出命中客户 |
+
+规则示例：
+
+```json
+{
+  "name": "高意向 VIP 客户",
+  "rules": {
+    "intention": ["high"],
+    "lifecycle": ["customer"],
+    "tags": ["vip"],
+    "min_score": 80
+  }
+}
+```
+
+支持的内置字段：`intention`、`lifecycle`、`region`、`tags`、`min_score`。
+
+### 触发器
+
+| Method | Path | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/v1/marketing/triggers` | 列出全部 trigger |
+| `POST` | `/api/v1/marketing/triggers` | 创建 trigger |
+| `DELETE` | `/api/v1/marketing/triggers/{id}` | 删除 |
+
+创建示例：
+
+```json
+{
+  "name": "意向升级到高自动打 VIP 标签",
+  "eventType": "customer.intention_changed",
+  "conditions": { "to": "high" },
+  "actions": [
+    { "type": "add_tag", "tag": "vip" },
+    { "type": "add_note", "content": "客户已成为高意向客户，请销售跟进" },
+    { "type": "webhook" }
+  ]
+}
+```
+
+支持的 action type：`add_tag`、`add_note`、`webhook`。
+
+## 15. 语音消息（v0.4.0+）
+
+### POST `/api/v1/chat/voice`（multipart/form-data）
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `audio` | file | ✓ | 音频文件（≤ 20 MB） |
+| `tenantId` | Guid | ✓ | 租户 ID |
+| `customerId` | Guid | ✓ | 客户 ID |
+| `conversationId` | Guid | — | 可选 |
+| `format` | string | — | 默认 `wav`，支持 pcm/wav/amr/mp3 |
+
+响应：
+
+```json
+{
+  "transcript": "你们支持哪些支付方式",
+  "sttProvider": "aliyun",
+  "sttLatencyMs": 420,
+  "reply": "支持微信、支付宝和银行卡...",
+  "conversationId": "...",
+  "messageId": "...",
+  "latencyMs": 1820
+}
+```
+
+未配置阿里云 AppKey 时自动降级到 Noop（返回占位文本，流程仍跑通）。
+
+### 微信语音
+
+`WeChatService` 自动处理 `msgType=voice` 微信消息：下载微信临时素材 → STT → 走 chat pipeline → 回复。
+
+## 16. 计费与订阅（v0.4.0+）
+
+### GET `/api/v1/billing/plans`（公开）
+
+返回全部 plan 及其价格、限额：
+
+```json
+[
+  { "name": "trial", "priceCents": 0, "monthlyMessageQuota": 500, "chatRateLimit": 100, ... },
+  { "name": "pro",   "priceCents": 9900, "monthlyMessageQuota": 5000, "chatRateLimit": 500, ... }
+]
+```
+
+### POST `/api/v1/billing/checkout`
+
+```json
+{ "plan": "pro", "provider": "stripe" }
+```
+
+Provider 可选：`stripe` / `wechat_pay` / `noop`（开发用）。
+
+### POST `/api/v1/billing/webhook/{provider}`（公开）
+
+Stripe 验签走 `Stripe-Signature` header；微信支付 V3 验签走 `Wechatpay-Signature` header。
+
+### GET `/api/v1/billing/history`
+
+当前租户订阅历史。
+
+### POST `/api/v1/billing/cancel`
+
+取消订阅；触发 `subscription.cancelled` webhook 事件。
+
+## 17. 多语言（v0.4.0+）
+
+### GET `/api/v1/culture/current`（公开）
+
+返回当前 culture + 支持列表。切换方式：HTTP `Accept-Language` header。
+
+后端错误消息自动按 culture 翻译；前端 admin 通过顶栏 🌐 切换；前端 uni-app 通过设置页切换。
+
+## 18. Agent 可观测（v0.4.0+）
+
+OpenTelemetry 全栈接入。`ActivitySource` = `AiCustomerService`，OTLP exporter 默认指向
+`http://localhost:4317`（可配 `OpenTelemetry:OtlpEndpoint`）。
+
+**Span 层级**：
+
+```
+chat.handle_user_message
+├── rag.retrieve       (tags: rag.top_k, rag.hit_count)
+└── llm.chat           (tags: llm.model, llm.tokens_*)
+agent.chat
+└── tool.query_order   (tags: tool.input.order_no)
+```
+
+**Metrics**：见 CHANGELOG v0.4.0 段。
+
 ---

@@ -24,6 +24,10 @@ public class AppDbContext : DbContext
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<WebhookConfig> WebhookConfigs => Set<WebhookConfig>();
     public DbSet<WebhookDelivery> WebhookDeliveries => Set<WebhookDelivery>();
+    public DbSet<CustomerSegment> CustomerSegments => Set<CustomerSegment>();
+    public DbSet<MarketingTrigger> MarketingTriggers => Set<MarketingTrigger>();
+    public DbSet<CustomerNote> CustomerNotes => Set<CustomerNote>();
+    public DbSet<CustomerTimelineEvent> CustomerTimelineEvents => Set<CustomerTimelineEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
